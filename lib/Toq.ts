@@ -3,38 +3,31 @@ import { ActivationType } from "./ActivationType";
 import { ConfigurableObject } from "./ConfigurableObject";
 
 export class Toq<TMock extends object> {
-    private callstackSymbol: symbol = Symbol("Call Stack");
-
-    private configurations: InternalConfig[] = [];
+    private configs: InternalConfig[] = [];
 
     public setup<TReturn>(setup: (config: TMock) => TReturn | void): MockConfig<TReturn> {
         let configObject = new ConfigurableObject();
         setup(configObject.object);
-        let oldMatches = this.configurations.filter(x => x.isPerfectMatch(configObject.callStack));
+        let oldMatches = this.configs.filter(x => x.isPerfectMatch(configObject.callStack));
 
-        let configuration = new InternalConfig(configObject.callStack);
         if (oldMatches.length)
-            configuration = oldMatches[0];
+            return oldMatches[0].asPublic<TReturn>();
 
-        this.configurations.push(configuration);
-        return configuration.asPublic<TReturn>();
+        let config = new InternalConfig(configObject.callStack);
+        this.configs.push(config);
+        return config.asPublic<TReturn>();
     }
 
     public verify<TReturn>(verify: (config: TMock) => TReturn | void) : void {
         let configObject = new ConfigurableObject();
         verify(configObject.object);
-        let matched = this.configurations.filter(x => x.isPerfectMatch(configObject.callStack));
-        let complete = matched.filter(x => x.called);
-        if (!complete.length)
-            throw new TypeError("Expected call");
-    }
+        let matches = this.configs.filter(x =>
+            x.isPerfectMatch(configObject.callStack) && 
+            x.called
+        );
 
-    private toName(thing: string | number | symbol): string {
-        if (typeof (thing) == "symbol") {
-            return Symbol.keyFor(thing as symbol);
-        } else {
-            return (thing as string | number).toString();
-        }
+        if (!matches.length)
+            throw new TypeError("Expected call");
     }
 
     public get object(): TMock {
@@ -45,11 +38,11 @@ export class Toq<TMock extends object> {
                 get: (target, prop) => {
                     callstack.push(new Activation(ActivationType.PropertyGet, null, prop));
 
-                    let done = this.configurations.filter(x => x.isPerfectMatch(callstack));
+                    let done = this.configs.filter(x => x.isPerfectMatch(callstack));
                     if (done.length > 0)
                         return done[0].call([]);
 
-                    if (!this.configurations.some(x => x.isMatch(callstack)))
+                    if (!this.configs.some(x => x.isMatch(callstack)))
                         throw new TypeError("Call " + this.toName(prop) + " was not set up");
 
                     return buildAnon();
@@ -57,13 +50,13 @@ export class Toq<TMock extends object> {
                 set: (target, prop, value) => {
                     callstack.push(new Activation(ActivationType.PropetySet, [value], prop));
 
-                    let done = this.configurations.filter(x => x.isPerfectMatch(callstack));
+                    let done = this.configs.filter(x => x.isPerfectMatch(callstack));
                     if (done.length > 0) {
                         done[0].call([value]);
                         return true;
                     }
 
-                    if (!this.configurations.some(x => x.isMatch(callstack)))
+                    if (!this.configs.some(x => x.isMatch(callstack)))
                         throw new TypeError("Call " + this.toName(prop) + " was not set up");
 
                     return true;
@@ -71,11 +64,11 @@ export class Toq<TMock extends object> {
                 apply: (target, thisArg, argumentsList) => {
                     callstack.push(new Activation(ActivationType.FunctionCall, [...argumentsList]));
 
-                    let done = this.configurations.filter(x => x.isPerfectMatch(callstack));
+                    let done = this.configs.filter(x => x.isPerfectMatch(callstack));
                     if (done.length > 0)
                         return done[0].call([...argumentsList]);
 
-                    if (!this.configurations.some(x => x.isMatch(callstack)))
+                    if (!this.configs.some(x => x.isMatch(callstack)))
                         throw new TypeError("Call was not set up");
 
                     return buildAnon();
