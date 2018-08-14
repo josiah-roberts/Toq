@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+		"declaration": true,
+        "outDir": "dist",
+        "module": "commonjs",
+        "noImplicitAny": true,
+        "removeComments": true,
+        "preserveConstEnums": true,
+        "sourceMap": true,
+        "target": "es2015",
+        "experimentalDecorators": true
+    }
+}
